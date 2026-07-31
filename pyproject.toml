@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "planetarypy>=0.80.0",
+    "planetarypy>=0.82.0",
     "loguru",
     "pandas",
     "rasterio",
