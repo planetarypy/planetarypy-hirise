@@ -14,3 +14,4 @@ Initial extraction from `planetarypy` core.
 - **`planetarypy.instruments.mro.hirise`** — moved verbatim from core, import path preserved via PEP 420 namespace packages. Browse download, metadata shaping, EDR source products, `sun_azimuth_from_top`, `jp2_to_geotiff`, and the ISIS mosaic pipeline behind the `[isis]` extra.
 - **Four `plp` verbs** — `hibrowse`, `hiedr`, `himos`, `hitif` — mounted through the `planetarypy.cli_plugins` entry point.
 - Self-registration of the HiRISE storage resolver and meta-display handler on import, replacing core's hard-coded fallbacks.
+- A `CONTRIBUTES` manifest declaring the four verbs, the `mro.hirise` storage resolver and the `mro.hirise.edr` meta handler, which core verifies once the plugin is loaded and reports on stderr if anything is missing. Its `panel` also groups these verbs under a `HiRISE ·` section in `plp --help`.

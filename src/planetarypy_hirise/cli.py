@@ -19,6 +19,19 @@ from planetarypy.instruments.mro import hirise as hirise  # noqa: F401  (side ef
 _PANEL_FETCH = "Fetch & download"
 _PANEL_VISUALIZE = "Visualize"
 
+#: What this plugin promises to contribute. Core checks every entry after
+#: ``register`` returns and complains on stderr about anything missing, which is
+#: the only way an under-contributing plugin gets caught: the load-bearing import
+#: above can resolve to an empty module without raising, leaving the side effects
+#: unfired and the CLI looking healthy. ``panel`` groups these verbs under a
+#: HiRISE section in ``plp --help``.
+CONTRIBUTES = {
+    "panel": "HiRISE",
+    "commands": ["hibrowse", "hiedr", "himos", "hitif"],
+    "storage_resolvers": ["mro.hirise"],
+    "meta_handlers": ["mro.hirise.edr"],
+}
+
 
 def _parse_ccds(specs) -> list[int] | None:
     """Flatten a ``--ccds`` spec into a list of CCD numbers (ints).
