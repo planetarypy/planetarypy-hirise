@@ -8,9 +8,16 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import typer
 from typer.testing import CliRunner
 
-from planetarypy.cli import app
+from planetarypy_hirise.cli import register
+
+# Build the app the way core does: an empty Typer that the plugin mounts onto.
+# Importing core's `app` would no longer see `hitif` — the verb only exists once
+# register() has run, which is the whole point of the plugin boundary.
+app = typer.Typer()
+register(app)
 
 runner = CliRunner()
 

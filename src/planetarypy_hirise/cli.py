@@ -12,7 +12,6 @@ fallback for exactly that lookup when HiRISE moved out.
 
 from __future__ import annotations
 
-import click
 import typer
 
 from planetarypy.instruments.mro import hirise as hirise  # noqa: F401  (side effects)
@@ -198,7 +197,9 @@ def register(app: typer.Typer) -> None:
                  "'--ccds 4 --ccds 5' is equivalent to '--ccds 4,5'.",
         ),
         mapfile: str = typer.Option(None, "--map", "-m", help="ISIS map projection file (.map)"),
-        overwrite: bool = typer.Option(False, "--force", "-f", help="Reprocess even if mosaic exists"),
+        overwrite: bool = typer.Option(
+            False, "--force", "-f", help="Reprocess even if mosaic exists"
+        ),
     ):
         """Create a HiRISE CCD mosaic from EDR data via ISIS.
 
