@@ -1,0 +1,91 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "planetarypy-hirise"
+version = "0.1.0"
+description = "MRO HiRISE support for planetarypy: browse images, EDR products, the ISIS mosaic pipeline, and JP2 to IAU-referenced GeoTIFF conversion."
+readme = "README.md"
+requires-python = ">= 3.11, <4"
+license = {text = "BSD license"}
+authors = [
+    {name = "Planetarypy Developers", email = "69774+michaelaye@users.noreply.github.com"}
+]
+keywords = ["planetarypy", "planetary", "mars", "mro", "hirise"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "planetarypy>=0.80.0",
+    "loguru",
+    "pandas",
+    "rasterio",
+    "requests",
+    "rich",
+    "tomlkit",
+    "yarl",
+]
+
+[project.optional-dependencies]
+# The ISIS half of the module: ingest_edr, calibrate_channel, stitch_channels,
+# map_project, create_mosaic(s). ISIS itself is a separate heavy install whose
+# bin/ must be on PATH; this only pulls the Python-side wrapper.
+isis = ["kalasiris"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff",
+]
+
+# Load-bearing: importing this module runs hirise.py's register_meta_handler and
+# register_storage_resolver side effects before any plp command executes.
+[project.entry-points."planetarypy.cli_plugins"]
+hirise = "planetarypy_hirise.cli:register"
+
+[project.urls]
+Homepage = "https://github.com/planetarypy/planetarypy-hirise"
+Repository = "https://github.com/planetarypy/planetarypy-hirise"
+
+[tool.hatch.build.targets.wheel]
+# Two roots: the PEP 420 namespace path that preserves
+# `planetarypy.instruments.mro.hirise`, and the plugin's own package.
+packages = ["src/planetarypy", "src/planetarypy_hirise"]
+
+[tool.hatch.build]
+include = [
+    "src/planetarypy/**/*.py",
+    "src/planetarypy_hirise/**/*.py",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F"]
+ignore = ["E203", "E701"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403", "F405"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = """
+    -xvs
+    --import-mode=importlib
+    -n auto
+"""
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
