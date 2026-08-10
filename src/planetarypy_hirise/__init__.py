@@ -16,4 +16,6 @@ entries and name maps), so a core-only install can still discover and fetch
 
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+from planetarypy_hirise.label import fetch_label, iof_affine, read_label
+
+__all__ = ["__version__", "fetch_label", "iof_affine", "read_label"]
