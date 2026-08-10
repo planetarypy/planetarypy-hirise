@@ -634,8 +634,36 @@ def edr_products(
     return products
 
 
+def missing_ccds(requested, obtained) -> list[str]:
+    """CCD names present in `requested` but not in `obtained`, in detector order.
+
+    Parameters
+    ----------
+    requested, obtained : list of SOURCE_PRODUCT
+
+    Returns
+    -------
+    list of str
+        e.g. ``["RED9"]`` when neither RED9 channel came back.
+    """
+    present = {prod.spid for prod in obtained}
+    absent = {prod.ccd for prod in requested if prod.spid not in present}
+    return sorted(absent, key=SOURCE_PRODUCT.ccds.index)
+
+
+# A HiRISE observation ships all 14 CCDs — RED0-9, IR10-11, BG12-13 — and the
+# reduction pipeline is built for that full complement. Occasionally one never
+# made it into the archive, which the PDS answers with 404/410; that gap has to
+# be worked around, not reported as a broken download.
+NOT_ARCHIVED_CODES = (404, 410)
+
+
 def _download_with_rich_task(prod, task_id, progress, overwrite, session=None):
-    """Download a single product, updating a rich progress task."""
+    """Download a single product, updating a rich progress task.
+
+    Returns ``(prod, status, error)`` with status one of ``"ok"``,
+    ``"missing"`` (no such product in the archive) or ``"failed"``.
+    """
     if session is None:
         import requests
         session = requests
@@ -644,11 +672,15 @@ def _download_with_rich_task(prod, task_id, progress, overwrite, session=None):
         size = prod.local_path.stat().st_size
         progress.update(task_id, completed=size, total=size,
                         description=f"[dim]{prod.fname} (cached)")
-        return prod.fname, None
+        return prod, "ok", None
 
     try:
         url = str(prod.url)
         R = session.get(url, stream=True, allow_redirects=True)
+        if R.status_code in NOT_ARCHIVED_CODES:
+            progress.update(task_id, completed=0, total=1,
+                            description=f"[yellow]{prod.fname} (not in archive)")
+            return prod, "missing", None
         if R.status_code != 200:
             raise ConnectionError(f"HTTP {R.status_code}")
         total = int(R.headers.get("content-length", 0))
@@ -660,9 +692,9 @@ def _download_with_rich_task(prod, task_id, progress, overwrite, session=None):
                 f.write(chunk)
                 progress.advance(task_id, len(chunk))
         part_file.rename(prod.local_path)
-        return prod.fname, None
+        return prod, "ok", None
     except Exception as e:
-        return prod.fname, str(e)
+        return prod, "failed", str(e)
 
 
 def download_edr(
@@ -696,12 +728,17 @@ def download_edr(
     Returns
     -------
     list of SOURCE_PRODUCT
-        The downloaded products (with valid ``.local_path``).
+        The products now on local disk (with valid ``.local_path``). CCDs the
+        archive does not carry for this observation are left out — use
+        `missing_ccds` against `edr_products` to name them.
 
     Raises
     ------
     RuntimeError
-        If any downloads failed.
+        If any download failed for a reason other than the product being
+        absent from the archive.
+    FileNotFoundError
+        If the archive carries none of the requested products.
     """
     import requests as req_mod
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -714,6 +751,7 @@ def download_edr(
         prod.local_path.parent.mkdir(parents=True, exist_ok=True)
 
     failed = []
+    obtained = []
     # Shared session for connection pooling (reuses TCP/TLS across threads)
     session = req_mod.Session()
     adapter = req_mod.adapters.HTTPAdapter(
@@ -742,10 +780,12 @@ def download_edr(
                 for prod in products
             }
             for future in as_completed(futures):
-                fname, error = future.result()
-                if error:
-                    logger.error(f"Failed: {fname}: {error}")
-                    failed.append(fname)
+                prod, status, error = future.result()
+                if status == "failed":
+                    logger.error(f"Failed: {prod.fname}: {error}")
+                    failed.append(prod.fname)
+                elif status == "ok":
+                    obtained.append(prod)
 
     session.close()
 
@@ -753,7 +793,15 @@ def download_edr(
         raise RuntimeError(
             f"{len(failed)}/{len(products)} downloads failed: {', '.join(failed)}"
         )
-    return products
+    if not obtained:
+        raise FileNotFoundError(
+            f"The archive has no EDR products for {obsid} at "
+            f"{products[0].url.parent} — check the observation ID."
+        )
+    absent = missing_ccds(products, obtained)
+    if absent:
+        logger.warning(f"{obsid}: no archived data for {', '.join(absent)}")
+    return obtained
 
 
 # ── ISIS Processing Chain ─────────────────────────────────────────
@@ -1028,7 +1076,10 @@ def create_mosaic(
     Returns
     -------
     Path
-        Path to the final mosaic cube.
+        Path to the final mosaic cube. If the archive carries no data for some
+        of the requested CCDs, they are dropped and the remaining ones are
+        mosaicked under a label listing them, e.g. ``ESP_..._RED012345678.mos.cub``
+        for an observation missing RED9.
 
     Examples
     --------
@@ -1082,8 +1133,34 @@ def create_mosaic(
     # ── Step 1: Download ──
     if download:
         _log(f"[1/6] Downloading {n_channels} channels...")
-        download_edr(obsid, colors=[color], ccds=ccds, saveroot=saveroot,
-                     overwrite=overwrite)
+        obtained = download_edr(obsid, colors=[color], ccds=ccds,
+                                saveroot=saveroot, overwrite=overwrite)
+    else:
+        obtained = [prod for prod in products if prod.local_path.exists()]
+        if not obtained:
+            raise FileNotFoundError(
+                f"No local EDR files for {obsid} in {out_dir}; "
+                "call with download=True."
+            )
+
+    # A CCD the archive never carried must not stop the reduction: drop it and
+    # mosaic what exists, under a label naming the CCDs that actually went in.
+    absent = missing_ccds(products, obtained)
+    if absent:
+        ccd_names = [name for name in ccd_names if name not in absent]
+        products = [prod for prod in products if prod.ccd not in absent]
+        ccd_label = prefix + "".join(name[len(prefix):] for name in ccd_names)
+        mosaic_path = out_dir / f"{obsid}_{ccd_label}.mos.cub"
+        n_channels = len(products)
+        n_ccds = len(ccd_names)
+        channel_names = " ".join(p.spid.split("_", 3)[-1] for p in products)
+        ccd_name_str = " ".join(ccd_names)
+        logger.warning(f"{obsid}: no data for {', '.join(absent)}")
+        _log(f"      no data for {', '.join(absent)} — mosaicking the "
+             f"{n_ccds} available CCDs as {ccd_label}")
+        if mosaic_path.exists() and not overwrite:
+            _log(f"Mosaic exists: {mosaic_path}")
+            return mosaic_path
 
     # Determine parallelism
     from concurrent.futures import ProcessPoolExecutor

@@ -165,7 +165,9 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit()
 
         from pathlib import Path
-        from planetarypy.instruments.mro.hirise import download_edr, edr_products
+        from planetarypy.instruments.mro.hirise import (
+            download_edr, edr_products, missing_ccds,
+        )
 
         # Default to RED if nothing specified
         if not red and not ir and not bg:
@@ -186,10 +188,20 @@ def register(app: typer.Typer) -> None:
         typer.echo(f"{obsid}: {len(products)} EDR files from {products[0].url.parent}")
 
         try:
-            download_edr(obsid, colors=colors, ccds=ccd_nums, saveroot=saveroot, overwrite=force)
+            obtained = download_edr(obsid, colors=colors, ccds=ccd_nums,
+                                    saveroot=saveroot, overwrite=force)
         except Exception as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
+
+        absent = missing_ccds(products, obtained)
+        if absent:
+            n_ccds = len({p.ccd for p in products})
+            typer.secho(
+                f"{obsid}: {n_ccds - len(absent)} of {n_ccds} requested CCDs are in "
+                f"the archive; no data for {', '.join(absent)}.",
+                fg=typer.colors.YELLOW, err=True,
+            )
 
         typer.echo(f"Stored in: {products[0].local_path.parent}")
 
