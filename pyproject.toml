@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "planetarypy-hirise"
-version = "0.1.0"
+version = "0.2.0"
 description = "MRO HiRISE support for planetarypy: browse images, EDR products, the ISIS mosaic pipeline, and JP2 to IAU-referenced GeoTIFF conversion."
 readme = "README.md"
 requires-python = ">= 3.11, <4"

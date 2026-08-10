@@ -14,7 +14,7 @@ entries and name maps), so a core-only install can still discover and fetch
 ``mro.hirise.{edr,rdr,dtm}``. What lives here is the behaviour.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from planetarypy_hirise.label import fetch_label, iof_affine, read_label
 
